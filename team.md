@@ -10,9 +10,9 @@
 - **Muhsina**: *Does the Single-Agent Advantage Survive in a Low-Resource Language? A Budget-Matched Comparison of Standalone and Multi-Agent LLM Architectures for Uzbek*
 - **Charos**: Nafas, a speech therapy app for Uzbek children; an Uzbek word-prediction model for AAC users; research on vision-language captions in Uzbek for blind and low-vision users.
 
-## Links
+[## Links
 - Code repository: https://github.com/mohinur2009/traffic_hackathon
 - Website repository: https://github.com/hakimovacharosedu-commits/traffic-website
 - Live demo: https://traffic-website-gtcgucwwfaudekw7aza9od.streamlit.app
 - Predictions on the sample videos: https://github.com/mohinur2009/traffic_hackathon/blob/main/predictions_samples.json
-- Weights: `weights/yolo11m.pt`, fetched by `weights/download.sh` in the code repository
+- Weights: `weights/yolo11m.pt`, fetched by `weights/download.sh` in the code repository](https://github.com/mohinur2009/traffic_hackathon/releases#release-v1.0)
