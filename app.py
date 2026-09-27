@@ -3,6 +3,7 @@
 The demo calls the SAME detect_events / RiskEstimator as the submission (solution.py),
 so whatever the team's pipeline detects is exactly what visitors see.
 """
+import math
 import os
 import tempfile
 
@@ -11,9 +12,32 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-import solution
-
 HERE = os.path.dirname(os.path.abspath(__file__))
+TEAM_ZIP = "https://github.com/mohinur2009/traffic_hackathon/archive/refs/heads/main.zip"
+WEIGHTS_URL = "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11m.pt"
+
+
+@st.cache_resource(show_spinner="Loading the team's model (first visit only)…")
+def load_pipeline():
+    """Fetch the team repo + weights once, so the demo always runs the submitted code."""
+    import sys, urllib.request, zipfile, io
+    root = os.path.join(tempfile.gettempdir(), "team_code")
+    code = os.path.join(root, "traffic_hackathon-main")
+    if not os.path.exists(os.path.join(code, "solution.py")):
+        data = urllib.request.urlopen(TEAM_ZIP, timeout=60).read()
+        zipfile.ZipFile(io.BytesIO(data)).extractall(root)
+    weights = os.path.join(code, "weights", "yolo11m.pt")
+    if not os.path.exists(weights):
+        urllib.request.urlretrieve(WEIGHTS_URL, weights)
+    sys.path.insert(0, code)
+    import solution as team_solution
+    from src import events as team_events
+    return team_solution, team_events
+
+
+solution, team_events = load_pipeline()
+DEMO_SAMPLE_S = 0.4   # lighter than the submission (0.2 s) so a CPU finishes in minutes
+DEMO_IMGSZ = 960      # submission uses 1280
 MAX_SECONDS = 120
 MAX_MB = 100
 CLASS_ORDER = list(solution.CLASSES)
@@ -78,26 +102,32 @@ def analyse(video_path, bar):
         st.error(f"Video is {meta['duration']:.0f} s long; the demo accepts up to {MAX_SECONDS} s.")
         return None
 
-    bar.progress(0.05, text="Detecting events…")
-    events = sorted(solution.detect_events(video_path), key=lambda e: e[0])
-
-    bar.progress(0.5, text="Computing accident risk…")
     est = solution.RiskEstimator()
     est.reset({k: meta[k] for k in ("video_id", "fps", "width", "height", "n_frames")})
+    est.stride, est.IMGSZ = 1, DEMO_IMGSZ
+    every = max(1, round(meta["fps"] * DEMO_SAMPLE_S))
     cap = cv2.VideoCapture(video_path)
-    times, scores, i = [], [], 0
+    times, scores, recs, idx = [], [], [], 0
     while True:
+        if idx % every:
+            if not cap.grab():
+                break
+            idx += 1
+            continue
         ok, frame = cap.read()
         if not ok:
             break
-        t = i / meta["fps"]
+        t = idx / meta["fps"]
         scores.append(float(est.step(frame, t)))
         times.append(t)
-        i += 1
-        if i % 50 == 0:
-            bar.progress(min(0.5 + 0.45 * i / max(meta["n_frames"], 1), 0.95),
-                         text="Computing accident risk…")
+        for o in est.objs:
+            recs.append((t, o["id"], o["cls"], math.hypot(*o["v"]), float(o["g"][0]), float(o["g"][1])))
+        idx += 1
+        bar.progress(min(0.95, idx / max(meta["n_frames"], 1)),
+                     text=f"Analysing… {t:.0f} / {meta['duration']:.0f} s")
     cap.release()
+    events = sorted(team_events.events_from_records(list(zip(times, scores)), recs, meta["duration"]),
+                    key=lambda e: e[0])
     bar.progress(1.0, text="Done")
     return meta, events, times, scores
 
@@ -120,7 +150,8 @@ demo, approach, eda, results, report, team = st.tabs(
 
 with demo:
     st.write(f"Upload an **.mp4** from the camera (**max {MAX_SECONDS // 60} min, {MAX_MB} MB**). "
-             "It runs on CPU, so a 2-minute clip takes a few minutes.")
+             "It runs on a free CPU, so a 2-minute clip takes several minutes. The demo samples a frame every "
+             f"{DEMO_SAMPLE_S} s at {DEMO_IMGSZ} px; the submitted pipeline uses 0.2 s at 1280 px on a GPU.")
     up = st.file_uploader("Video", type=["mp4"])
     if up is not None:
         if up.size > MAX_MB * 1024 * 1024:
