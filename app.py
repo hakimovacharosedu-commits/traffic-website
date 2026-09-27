@@ -104,6 +104,8 @@ def analyse(video_path, bar):
 
 def page(name):
     path = os.path.join(HERE, "pages_md", name)
+    if not os.path.exists(path):
+        path = os.path.join(HERE, name)  # also accept the .md next to app.py
     if os.path.exists(path):
         st.markdown(open(path, encoding="utf-8").read())
     else:
